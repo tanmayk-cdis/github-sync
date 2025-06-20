@@ -19,7 +19,8 @@ try:
     WEBHOOK_CONFIGS = {
         entry['secret']: {
             'repo_path': entry['repo_path'],
-            'restart_command': entry['restart_command']
+            'restart_command': entry['restart_command'],
+            'branch': entry['branch']
         }
         for entry in config_data.get('webhooks', [])
     }
@@ -60,11 +61,12 @@ async def webhook(request: Request):
     if not matched_config:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid signature or no matching secret")
 
-    # Check if the event is a push to the main branch
+    # Check if the event is a push to the configured branch
     if request.headers.get('X-GitHub-Event') == 'push':
         try:
             payload_json = await request.json()
-            if payload_json.get('ref') == 'refs/heads/main':  # Replace 'main' with your branch
+            branch_ref = f"refs/heads/{matched_config['branch']}"
+            if payload_json.get('ref') == branch_ref:
                 try:
                     # Pull the repository
                     repo_path = matched_config['repo_path']
@@ -74,7 +76,7 @@ async def webhook(request: Request):
                     # Run the restart command
                     restart_command = matched_config['restart_command']
                     subprocess.run([restart_command], shell=True, check=True)
-                    return {"message": f"Pull and restart successful for {repo_path}"}
+                    return {"message": f"Pull and restart successful for {repo_path} on branch {matched_config['branch']}"}
                 except subprocess.CalledProcessError as e:
                     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error: {str(e)}")
         except ValueError:

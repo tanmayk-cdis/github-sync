@@ -3,12 +3,14 @@
         {
             "secret": "secret-token-1",
             "repo_path": "/var/www/repo1",
-            "restart_command": "systemctl restart service1"
+            "restart_command": "systemctl restart service1",
+            "branch": "main"
         },
         {
             "secret": "secret-token-2",
             "repo_path": "/var/www/repo2",
-            "restart_command": "systemctl restart service2"
+            "restart_command": "systemctl restart service2",
+            "branch": "master"
         }
     ]
 }
