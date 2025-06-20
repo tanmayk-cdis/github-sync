@@ -5,6 +5,7 @@ import hashlib
 import os
 import json
 from dotenv import load_dotenv
+import threading
 
 app = FastAPI()
 
@@ -42,6 +43,19 @@ def verify_signature(payload: bytes, secret: str, signature: str) -> bool:
     ).hexdigest()
     return hmac.compare_digest(computed_sig, signature)
 
+def run_commands(repo_path: str, restart_command: str):
+    """Run git pull and restart command sequentially, logging output."""
+    try:
+        os.chdir(repo_path)
+        result = subprocess.run(['git', 'pull'], capture_output=True, text=True, check=True)
+        print(f"git pull output for {repo_path}: {result.stdout}{result.stderr}")
+        result = subprocess.run([restart_command], shell=True, capture_output=True, text=True, check=True)
+        print(f"Restart command output for {repo_path}: {result.stdout}{result.stderr}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error in {repo_path}: {e}\n{e.stderr}")
+    except Exception as e:
+        print(f"Unexpected error in {repo_path}: {str(e)}")
+
 @app.post("/webhook")
 async def webhook(request: Request):
     # Get the signature from the request headers
@@ -65,27 +79,23 @@ async def webhook(request: Request):
     if request.headers.get('X-GitHub-Event') == 'push':
         try:
             payload_json = await request.json()
+            print(f"Received webhook payload: {payload_json}")
             branch_ref = f"refs/heads/{matched_config['branch']}"
             if payload_json.get('ref') == branch_ref:
-                try:
-                    # Pull the repository
-                    repo_path = matched_config['repo_path']
-                    os.chdir(repo_path)
-                    subprocess.run(['git', 'pull'], check=True)
-
-                    # Run the restart command
-                    restart_command = matched_config['restart_command']
-                    subprocess.run([restart_command], shell=True, check=True)
-                    return {"message": f"Pull and restart successful for {repo_path} on branch {matched_config['branch']}"}
-                except subprocess.CalledProcessError as e:
-                    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error: {str(e)}")
-        except ValueError:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON payload")
+                # Start commands in a background thread
+                thread = threading.Thread(
+                    target=run_commands,
+                    args=(matched_config['repo_path'], matched_config['restart_command'])
+                )
+                thread.start()
+                return {"message": f"Pull and restart triggered for {matched_config['repo_path']} on branch {matched_config['branch']}"}
+        except ValueError as e:
+            print(f"JSON parsing error: {str(e)}")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid JSON payload: {str(e)}")
 
     return {"message": "Event received"}
 
 if __name__ == '__main__':
     import uvicorn
-    # Load port from environment variable, default to 8000
     port = int(os.getenv('WEBHOOK_PORT', 8000))
     uvicorn.run(app, host='127.0.0.1', port=port)

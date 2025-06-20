@@ -10,6 +10,10 @@
 
 ## For Production
 
-### Linux
-
 uvicorn --host 127.0.0.1 --port 8201 --workers 3 main:app
+
+## Changing Repo Permissions
+
+sudo chown -R user:webhookgroup /var/www/repo1 /var/www/repo2
+sudo chmod -R u+rwx,g+rwx /var/www/repo1 /var/www/repo2
+sudo chmod -R g+s /var/www/repo1 /var/www/repo2
