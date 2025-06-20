@@ -79,7 +79,6 @@ async def webhook(request: Request):
     if request.headers.get('X-GitHub-Event') == 'push':
         try:
             payload_json = await request.json()
-            print(f"Received webhook payload: {payload_json}")
             branch_ref = f"refs/heads/{matched_config['branch']}"
             if payload_json.get('ref') == branch_ref:
                 # Start commands in a background thread
