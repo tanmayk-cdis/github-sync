@@ -6,6 +6,7 @@ import os
 import json
 from dotenv import load_dotenv
 import threading
+from typing import Optional
 
 app = FastAPI()
 
@@ -43,7 +44,7 @@ def verify_signature(payload: bytes, secret: str, signature: str) -> bool:
     ).hexdigest()
     return hmac.compare_digest(computed_sig, signature)
 
-def run_commands(repo_path: str | None, restart_command: str):
+def run_commands(repo_path: Optional[str], restart_command: str):
     """Run git pull (if repo_path specified) and restart command sequentially, logging output."""
     try:
         if repo_path:
