@@ -7,6 +7,7 @@ import json
 from dotenv import load_dotenv
 import threading
 from typing import Optional
+import logging
 
 app = FastAPI()
 
@@ -44,25 +45,32 @@ def verify_signature(payload: bytes, secret: str, signature: str) -> bool:
     ).hexdigest()
     return hmac.compare_digest(computed_sig, signature)
 
+# Set up logger for background tasks
+background_logger = logging.getLogger("background_tasks")
+background_logger.setLevel(logging.INFO)
+file_handler = logging.FileHandler("background_tasks.log")
+file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s"))
+background_logger.addHandler(file_handler)
+
 def run_commands(repo_path: Optional[str], restart_command: str):
-    print(f"run_commands started with repo_path={repo_path}, restart_command={restart_command}")
+    background_logger.info(f"run_commands started with repo_path={repo_path}, restart_command={restart_command}")
     """Run git pull (if repo_path specified) and restart command sequentially, logging output."""
     try:
         if repo_path:
+            background_logger.info(f"Changing directory to {repo_path}")
             os.chdir(repo_path)
             result = subprocess.run(['git', 'pull'], capture_output=True, text=True, check=True)
-            print(f"git pull output for {repo_path}: {result.stdout}{result.stderr}")
-            # Run restart_command in the repo_path directory
+            background_logger.info(f"git pull output for {repo_path}: {result.stdout}{result.stderr}")
             result = subprocess.run([restart_command], shell=True, capture_output=True, text=True, check=True)
-            print(f"Restart command output for {repo_path}: {result.stdout}{result.stderr}")
+            background_logger.info(f"Restart command output for {repo_path}: {result.stdout}{result.stderr}")
         else:
-            # Just run restart_command in the current directory
+            background_logger.info("No repo_path specified, running restart_command only")
             result = subprocess.run([restart_command], shell=True, capture_output=True, text=True, check=True)
-            print(f"Restart command output (no repo_path): {result.stdout}{result.stderr}")
+            background_logger.info(f"Restart command output (no repo_path): {result.stdout}{result.stderr}")
     except subprocess.CalledProcessError as e:
-        print(f"Error in {repo_path or 'no repo_path'}: {e}\n{e.stderr}")
+        background_logger.error(f"Error in {repo_path or 'no repo_path'}: {e}\n{e.stderr}")
     except Exception as e:
-        print(f"Unexpected error in {repo_path or 'no repo_path'}: {str(e)}")
+        background_logger.error(f"Unexpected error in {repo_path or 'no repo_path'}: {str(e)}")
 
 @app.post("/webhook")
 async def webhook(request: Request, background_tasks: BackgroundTasks):
