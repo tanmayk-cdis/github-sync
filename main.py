@@ -19,7 +19,7 @@ try:
         config_data = json.load(f)
     WEBHOOK_CONFIGS = {
         entry['secret']: {
-            'repo_path': entry['repo_path'],
+            'repo_path': entry.get('repo_path'),  # Now optional
             'restart_command': entry['restart_command'],
             'branch': entry['branch']
         }
@@ -43,18 +43,24 @@ def verify_signature(payload: bytes, secret: str, signature: str) -> bool:
     ).hexdigest()
     return hmac.compare_digest(computed_sig, signature)
 
-def run_commands(repo_path: str, restart_command: str):
-    """Run git pull and restart command sequentially, logging output."""
+def run_commands(repo_path: str | None, restart_command: str):
+    """Run git pull (if repo_path specified) and restart command sequentially, logging output."""
     try:
-        os.chdir(repo_path)
-        result = subprocess.run(['git', 'pull'], capture_output=True, text=True, check=True)
-        print(f"git pull output for {repo_path}: {result.stdout}{result.stderr}")
-        result = subprocess.run([restart_command], shell=True, capture_output=True, text=True, check=True)
-        print(f"Restart command output for {repo_path}: {result.stdout}{result.stderr}")
+        if repo_path:
+            os.chdir(repo_path)
+            result = subprocess.run(['git', 'pull'], capture_output=True, text=True, check=True)
+            print(f"git pull output for {repo_path}: {result.stdout}{result.stderr}")
+            # Run restart_command in the repo_path directory
+            result = subprocess.run([restart_command], shell=True, capture_output=True, text=True, check=True)
+            print(f"Restart command output for {repo_path}: {result.stdout}{result.stderr}")
+        else:
+            # Just run restart_command in the current directory
+            result = subprocess.run([restart_command], shell=True, capture_output=True, text=True, check=True)
+            print(f"Restart command output (no repo_path): {result.stdout}{result.stderr}")
     except subprocess.CalledProcessError as e:
-        print(f"Error in {repo_path}: {e}\n{e.stderr}")
+        print(f"Error in {repo_path or 'no repo_path'}: {e}\n{e.stderr}")
     except Exception as e:
-        print(f"Unexpected error in {repo_path}: {str(e)}")
+        print(f"Unexpected error in {repo_path or 'no repo_path'}: {str(e)}")
 
 @app.post("/webhook")
 async def webhook(request: Request):
@@ -84,7 +90,7 @@ async def webhook(request: Request):
                 # Start commands in a background thread
                 thread = threading.Thread(
                     target=run_commands,
-                    args=(matched_config['repo_path'], matched_config['restart_command'])
+                    args=(matched_config.get('repo_path'), matched_config['restart_command'])
                 )
                 thread.start()
                 return {"message": f"Pull and restart triggered for {matched_config['repo_path']} on branch {matched_config['branch']}"}
