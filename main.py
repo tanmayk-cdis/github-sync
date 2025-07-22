@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException, status
+from fastapi import FastAPI, Request, HTTPException, status, BackgroundTasks
 import subprocess
 import hmac
 import hashlib
@@ -64,7 +64,7 @@ def run_commands(repo_path: Optional[str], restart_command: str):
         print(f"Unexpected error in {repo_path or 'no repo_path'}: {str(e)}")
 
 @app.post("/webhook")
-async def webhook(request: Request):
+async def webhook(request: Request, background_tasks: BackgroundTasks):
     # Get the signature from the request headers
     signature = request.headers.get('X-Hub-Signature-256', '')
 
@@ -88,12 +88,12 @@ async def webhook(request: Request):
             payload_json = await request.json()
             branch_ref = f"refs/heads/{matched_config['branch']}"
             if payload_json.get('ref') == branch_ref:
-                # Start commands in a background thread
-                thread = threading.Thread(
-                    target=run_commands,
-                    args=(matched_config.get('repo_path'), matched_config['restart_command'])
+                # Use FastAPI BackgroundTasks instead of threading
+                background_tasks.add_task(
+                    run_commands,
+                    matched_config.get('repo_path'),
+                    matched_config['restart_command']
                 )
-                thread.start()
                 return {"message": f"Pull and restart triggered for {matched_config['repo_path']} on branch {matched_config['branch']}"}
         except ValueError as e:
             print(f"JSON parsing error: {str(e)}")
