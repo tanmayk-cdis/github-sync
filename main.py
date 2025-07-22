@@ -45,6 +45,7 @@ def verify_signature(payload: bytes, secret: str, signature: str) -> bool:
     return hmac.compare_digest(computed_sig, signature)
 
 def run_commands(repo_path: Optional[str], restart_command: str):
+    print(f"run_commands started with repo_path={repo_path}, restart_command={restart_command}")
     """Run git pull (if repo_path specified) and restart command sequentially, logging output."""
     try:
         if repo_path:
